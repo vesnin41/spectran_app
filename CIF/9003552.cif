@@ -1,0 +1,82 @@
+#------------------------------------------------------------------------------
+#$Date: 2017-10-06 19:24:22 +0300 (Fri, 06 Oct 2017) $
+#$Revision: 201816 $
+#$URL: file:///home/coder/svn-repositories/cod/cif/9/00/35/9003552.cif $
+#------------------------------------------------------------------------------
+#
+# This file is available in the Crystallography Open Database (COD),
+# http://www.crystallography.net/. The original data for this entry
+# were provided the American Mineralogist Crystal Structure Database,
+# http://rruff.geo.arizona.edu/AMS/amcsd.php
+#
+# The file may be used within the scientific community so long as
+# proper attribution is given to the journal article from which the
+# data were obtained.
+#
+data_9003552
+loop_
+_publ_author_name
+'Fleet, M. E.'
+'Liu, X.'
+'King, P. L.'
+_publ_section_title
+;Accommodation of the carbonate ion in apatite: An FTIR and X-ray structure
+ study of crystals synthesized at 2-4 GPa Sample: xt372
+;
+_journal_name_full               'American Mineralogist'
+_journal_page_first              1422
+_journal_page_last               1432
+_journal_volume                  89
+_journal_year                    2004
+_chemical_formula_sum            'Ca5 H1.44 O13.012 P2.928'
+_chemical_name_mineral           Carbonate-hydroxylapatite
+_space_group_IT_number           176
+_symmetry_space_group_name_Hall  '-P 6c'
+_symmetry_space_group_name_H-M   'P 63/m'
+_cell_angle_alpha                90
+_cell_angle_beta                 90
+_cell_angle_gamma                120
+_cell_length_a                   9.4234
+_cell_length_b                   9.4234
+_cell_length_c                   6.8801
+_cell_volume                     529.104
+_database_code_amcsd             0003644
+_exptl_crystal_density_diffrn    3.143
+_exptl_crystal_pressure_history  'synthesized at 2-4 GPa'
+_cod_original_formula_sum        'Ca5 P2.928 O13.012 H1.44'
+_cod_database_code               9003552
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+-x+y,-x,1/2-z
+x-y,x,1/2+z
+y,-x+y,-z
+-y,x-y,z
+x,y,1/2-z
+-x,-y,1/2+z
+x-y,x,-z
+-x+y,-x,z
+-y,x-y,1/2-z
+y,-x+y,1/2+z
+-x,-y,-z
+loop_
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+Ca1 0.66667 0.33333 0.00170 1.00000 0.01480
+Ca2 0.99304 0.24700 0.25000 1.00000 0.01370
+P 0.36880 0.39880 0.25000 0.97600 0.01010
+O1 0.48450 0.32890 0.25000 1.00000 0.01500
+O2 0.46490 0.58660 0.25000 1.00000 0.02000
+O3 0.25800 0.34320 0.07140 0.98800 0.02400
+O4 0.00000 0.00000 0.19500 0.50000 0.02300
+H 0.00000 0.00000 0.05300 0.72000 0.02300
+OB3 0.36000 0.43000 0.47000 0.01400 0.02500
+loop_
+_cod_related_entry_id
+_cod_related_entry_database
+_cod_related_entry_code
+1 AMCSD 0003644

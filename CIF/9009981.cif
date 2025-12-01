@@ -1,0 +1,77 @@
+#------------------------------------------------------------------------------
+#$Date: 2016-04-13 03:30:30 +0300 (Wed, 13 Apr 2016) $
+#$Revision: 182034 $
+#$URL: svn://www.crystallography.net/cod/cif/9/00/99/9009981.cif $
+#------------------------------------------------------------------------------
+#
+# This file is available in the Crystallography Open Database (COD),
+# http://www.crystallography.net/. The original data for this entry
+# were provided the American Mineralogist Crystal Structure Database,
+# http://rruff.geo.arizona.edu/AMS/amcsd.php
+#
+# The file may be used within the scientific community so long as
+# proper attribution is given to the journal article from which the
+# data were obtained.
+#
+data_9009981
+loop_
+_publ_author_name
+'Perdikatsis, B.'
+_publ_section_title
+;
+ X-ray powder diffraction study of francolite by the Rietveld method
+ Locality: Epirus, Greece
+ Sample: T = 1200 C
+ Note: Reported structure does not reproduce reported formula or bondlengths
+;
+_journal_coden_ASTM              MSFOEP
+_journal_name_full               'Materials Science Forum'
+_journal_page_first              809
+_journal_page_last               814
+_journal_paper_doi               10.4028/www.scientific.net/MSF.79-82.809
+_journal_volume                  79-82
+_journal_year                    1991
+_chemical_formula_sum            'Ca2.176 F0.169 O8.973 P1.488'
+_chemical_name_mineral           Carbonate-fluorapatite
+_space_group_IT_number           176
+_symmetry_space_group_name_Hall  '-P 6c'
+_symmetry_space_group_name_H-M   'P 63/m'
+_cell_angle_alpha                90
+_cell_angle_beta                 90
+_cell_angle_gamma                120
+_cell_length_a                   9.3708
+_cell_length_b                   9.3708
+_cell_length_c                   6.8880
+_cell_volume                     523.814
+_diffrn_ambient_temperature      1473.15
+_exptl_crystal_density_diffrn    1.776
+_cod_original_formula_sum        'Ca2.176 P1.488 O8.973 F.169'
+_cod_database_code               9009981
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+-x+y,-x,1/2-z
+x-y,x,1/2+z
+y,-x+y,-z
+-y,x-y,z
+x,y,1/2-z
+-x,-y,1/2+z
+x-y,x,-z
+-x+y,-x,z
+-y,x-y,1/2-z
+y,-x+y,1/2+z
+-x,-y,-z
+loop_
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+Ca1 0.33333 0.66667 0.00050 0.33800 0.01512
+Ca2 0.24100 0.99150 0.25000 0.50000 0.00566
+P 0.39830 0.36860 0.25000 0.49600 0.00375
+O1 0.32230 0.48280 0.25000 0.49200 0.00532
+O2 0.58980 0.46380 0.25000 0.49900 0.01779
+O3 0.34120 0.25580 0.06950 1.00000 0.01360
+F 0.00000 0.00000 0.25000 0.16900 0.05181

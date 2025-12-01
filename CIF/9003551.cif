@@ -1,0 +1,75 @@
+#------------------------------------------------------------------------------
+#$Date: 2016-02-16 14:49:47 +0200 (Tue, 16 Feb 2016) $
+#$Revision: 176465 $
+#$URL: svn://www.crystallography.net/cod/cif/9/00/35/9003551.cif $
+#------------------------------------------------------------------------------
+#
+# This file is available in the Crystallography Open Database (COD),
+# http://www.crystallography.net/
+#
+# All data on this site have been placed in the public domain by the
+# contributors.
+#
+data_9003551
+loop_
+_publ_author_name
+'Fleet M E'
+'Liu X'
+'King P L'
+_publ_section_title
+;Accommodation of the carbonate ion in apatite: An FTIR and X-ray structure
+ study of crystals synthesized at 2-4 GPa Sample: xt373
+;
+_journal_name_full               'American Mineralogist'
+_journal_page_first              1422
+_journal_page_last               1432
+_journal_volume                  89
+_journal_year                    2004
+_chemical_formula_sum            'C0.22 Ca5 O13.514 P2.823'
+_chemical_name_mineral           Carbonate-hydroxylapatite
+_space_group_IT_number           176
+_symmetry_space_group_name_Hall  '-P 6c'
+_symmetry_space_group_name_H-M   'P 63/m'
+_cell_angle_alpha                90
+_cell_angle_beta                 90
+_cell_angle_gamma                120
+_cell_length_a                   9.4817
+_cell_length_b                   9.4817
+_cell_length_c                   6.8843
+_cell_volume                     535.998
+_exptl_crystal_pressure_history  'synthesized at 2-4 GPa'
+_cod_original_formula_sum        'Ca5 P2.823 O13.514 C.22'
+_cod_database_code               9003551
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+-x+y,-x,1/2-z
+x-y,x,1/2+z
+y,-x+y,-z
+-y,x-y,z
+x,y,1/2-z
+-x,-y,1/2+z
+x-y,x,-z
+-x+y,-x,z
+-y,x-y,1/2-z
+y,-x+y,1/2+z
+-x,-y,-z
+loop_
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+Ca1 0.66667 0.33333 0.00210 1.00000 0.01750
+Ca2 0.99095 0.24961 0.25000 1.00000 0.02140
+P 0.37090 0.40140 0.25000 0.94100 0.01500
+O1 0.48470 0.33100 0.25000 1.00000 0.01900
+O2 0.46580 0.58550 0.25000 1.00000 0.03560
+O3 0.26050 0.34600 0.07270 0.97100 0.04120
+O4 0.00000 0.00000 0.25000 0.12200 0.02500
+C 0.00000 0.00000 0.00000 0.22000 0.02500
+OA11 0.02300 0.00000 0.66100 0.09800 0.02500
+OA12 0.94600 0.12300 0.52500 0.05700 0.02500
+OA2 0.92500 0.02100 0.45500 0.06500 0.02500
+OB3 0.34800 0.42100 0.47700 0.04100 0.02500
