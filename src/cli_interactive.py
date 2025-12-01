@@ -13,6 +13,7 @@ from typing import Iterable, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from src.config import CONFIG
 
 from src.fitting import fit_model, generate_spec
 from src.reading.data_from import spectrum_from_csv
@@ -34,6 +35,7 @@ from src.plotting.plots import (
 from src.utils.peak_metrics import select_crystalline_peaks
 from src.utils.search_match import (
     annotate_peaks_with_phases,
+    annotate_peaks_with_best_phase,
     build_ref_pattern_from_cif,
     search_match_all_phases,
 )
@@ -144,6 +146,7 @@ def select_phases_menu(
     phases_dir: str = "CIF",
     exp_two_theta: np.ndarray | None = None,
     exp_intensity: np.ndarray | None = None,
+    interval_2theta: tuple[float, float] = (20.0, 60.0),
 ) -> list[pd.DataFrame]:
     """
     Interactive selection of CIF phases with preview plots.
@@ -175,7 +178,7 @@ def select_phases_menu(
         print(f"\nЗагружаю {cif_path.name}...")
 
         try:
-            ref_df = build_ref_pattern_from_cif(str(cif_path), interval_2theta=(20.0, 60.0))
+            ref_df = build_ref_pattern_from_cif(str(cif_path), interval_2theta=interval_2theta)
         except Exception as exc:
             print(f"[WARN] Не удалось разобрать {cif_path.name}: {exc}")
             continue
@@ -236,8 +239,8 @@ def interactive_session() -> None:
         # Range + preprocessing loop
         tmin, tmax = 20.0, 60.0
         while True:
-            tmin = ask_float("Минимальный 2θ (по умолчанию 20): ", default=tmin)
-            tmax = ask_float("Максимальный 2θ (по умолчанию 60): ", default=tmax)
+            tmin = ask_float(f"Минимальный 2θ (по умолчанию {CONFIG.theta_min}): ", default=CONFIG.theta_min)
+            tmax = ask_float(f"Максимальный 2θ (по умолчанию {CONFIG.theta_max}): ", default=CONFIG.theta_max)
             if tmax <= tmin:
                 print("Максимум должен быть больше минимума.")
                 continue
@@ -246,13 +249,19 @@ def interactive_session() -> None:
 
             # Savitzky–Golay options
             sg_choice = input(
-                "Применить сглаживание Савицкого–Голея? [1]Да (31/3) [2]Да, вручную [0]Нет (Enter=1): "
+                f"Применить сглаживание Савицкого–Голея? [1]Да ({CONFIG.savgol_window}/{CONFIG.savgol_poly}) [2]Да, вручную [0]Нет (Enter=1): "
             ).strip()
             if sg_choice in ("", "1"):
-                wl, po = 31, 3
+                wl, po = CONFIG.savgol_window, CONFIG.savgol_poly
             elif sg_choice == "2":
-                wl = ask_int("Окно сглаживания (нечетное, по умолчанию 31): ", default=31)
-                po = ask_int("Порядок полинома (по умолчанию 3): ", default=3)
+                wl = ask_int(
+                    f"Окно сглаживания (нечетное, по умолчанию {CONFIG.savgol_window}): ",
+                    default=CONFIG.savgol_window,
+                )
+                po = ask_int(
+                    f"Порядок полинома (по умолчанию {CONFIG.savgol_poly}): ",
+                    default=CONFIG.savgol_poly,
+                )
             else:
                 wl, po = None, None
             if wl and po:
@@ -364,9 +373,21 @@ def interactive_session() -> None:
             lambda row: get_crystallite_size_scherrer(row["fwhm"], row["center"]),
             axis=1,
         )
-        peak_table["is_crystalline"] = select_crystalline_peaks(peak_table)
+        peak_table["is_crystalline"] = select_crystalline_peaks(
+            peak_table,
+            fwhm_min=CONFIG.ci_fwhm_min,
+            fwhm_max=CONFIG.ci_fwhm_max,
+            rel_height_min=CONFIG.rel_height_min,
+        )
 
-        ci = compute_ci(df_proc["two_theta"].values, df_proc["intensity"].values, peak_table)
+        ci = compute_ci(
+            df_proc["two_theta"].values,
+            df_proc["intensity"].values,
+            peak_table,
+            fwhm_min=CONFIG.ci_fwhm_min,
+            fwhm_max=CONFIG.ci_fwhm_max,
+            rel_height_min=CONFIG.rel_height_min,
+        )
         print("Результаты подгонки:")
         print(peak_table)
         print(f"Индекс кристалличности CI = {ci:.1f} %")
@@ -378,20 +399,18 @@ def interactive_session() -> None:
                 phases_dir="CIF",
                 exp_two_theta=df_proc["two_theta"].values,
                 exp_intensity=df_proc["intensity"].values,
+                interval_2theta=(tmin, tmax),
             )
             if ref_db:
                 ranking = search_match_all_phases(peak_table, ref_db=ref_db)
                 print("\nРанжирование фаз по FoM:")
                 print(ranking)
 
-                matches = annotate_peaks_with_phases(peak_table, ref_db=ref_db)
-                peak_table["phase_id"] = None
-                for _, row in matches.iterrows():
-                    exp_idx = row.get("exp_index")
-                    if exp_idx in peak_table.index:
-                        peak_table.at[exp_idx, "phase_id"] = row["phase_id"]
+                peak_table = annotate_peaks_with_best_phase(
+                    peak_table, ref_db=ref_db, delta_2theta_max=CONFIG.delta_2theta_max
+                )
                 print("\nПики с фазовой разметкой:")
-                print(peak_table[["prefix", "center", "fwhm", "crystal_size_nm", "phase_id"]])
+                print(peak_table[["prefix", "center", "fwhm", "crystal_size_nm", "phase_id", "dtheta_match", "intensity_diff"]])
             else:
                 print("Фазы не выбраны, фазовый анализ пропущен.")
 

@@ -202,3 +202,26 @@ def annotate_peaks_with_phases(
     )
     best = all_matches.groupby("exp_index", as_index=False).first()
     return best
+
+
+def annotate_peaks_with_best_phase(
+    exp_peaks: pd.DataFrame,
+    ref_db: Iterable[pd.DataFrame],
+    delta_2theta_max: float = 0.2,
+) -> pd.DataFrame:
+    """
+    Return exp_peaks copy with phase_id/dtheta_match/intensity_diff columns.
+    """
+    matches = annotate_peaks_with_phases(exp_peaks, ref_db, delta_2theta_max=delta_2theta_max)
+    exp_peaks = exp_peaks.copy()
+    exp_peaks["phase_id"] = None
+    exp_peaks["dtheta_match"] = np.nan
+    exp_peaks["intensity_diff"] = np.nan
+
+    for _, row in matches.iterrows():
+        idx = row["exp_index"]
+        if idx in exp_peaks.index:
+            exp_peaks.at[idx, "phase_id"] = row["phase_id"]
+            exp_peaks.at[idx, "dtheta_match"] = row["dtheta"]
+            exp_peaks.at[idx, "intensity_diff"] = row["intensity_diff"]
+    return exp_peaks

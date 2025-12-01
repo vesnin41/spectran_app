@@ -4,6 +4,7 @@ import uuid
 
 import numpy as np
 
+from src.config import CONFIG
 from src.fitting import fit_model, generate_spec
 from src.plotting.plots import plot_fit
 from src.reading.data_from import spectrum_from_csv
@@ -107,7 +108,7 @@ def process_spectrum(
 
     # Preprocessing: trim → smooth → baseline → normalize to 0–100 %
     preprocess_cfg = {
-        "interval": (20.0, 60.0),
+        "interval": (CONFIG.theta_min, CONFIG.theta_max),
         "savgol_window": 31,
         "savgol_poly": 3,
         "baseline": True,
@@ -172,7 +173,14 @@ def process_spectrum(
     )
     peak_table["is_crystalline"] = select_crystalline_peaks(peak_table)
 
-    ci_value = compute_ci(df["two_theta"].values, df["intensity"].values, peak_table)
+    ci_value = compute_ci(
+        df["two_theta"].values,
+        df["intensity"].values,
+        peak_table,
+        fwhm_min=CONFIG.ci_fwhm_min,
+        fwhm_max=CONFIG.ci_fwhm_max,
+        rel_height_min=CONFIG.rel_height_min,
+    )
 
     print("Best-fit parameters summary:")
     print(peak_table)
