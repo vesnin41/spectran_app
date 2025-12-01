@@ -24,8 +24,19 @@ from src.utils.preprocessing import (
     trim_2theta,
 )
 from src.utils.xrd_geometry import get_crystallite_size_scherrer, get_d_hkl
-from src.plotting.plots import plot_spectrum, plot_with_peaks, plot_fit
+from src.plotting.plots import (
+    plot_spectrum,
+    plot_with_peaks,
+    plot_fit,
+    plot_fit_with_phase_markers,
+    plot_ref_preview,
+)
 from src.utils.peak_metrics import select_crystalline_peaks
+from src.utils.search_match import (
+    annotate_peaks_with_phases,
+    build_ref_pattern_from_cif,
+    search_match_all_phases,
+)
 
 
 def ask_int(prompt: str, default: int | None = None) -> int:
@@ -127,6 +138,72 @@ def save_results(
                 fh.write(f"  {k}: {v}\n")
 
     print(f"Результаты сохранены в: {result_dir}")
+
+
+def select_phases_menu(
+    phases_dir: str = "CIF",
+    exp_two_theta: np.ndarray | None = None,
+    exp_intensity: np.ndarray | None = None,
+) -> list[pd.DataFrame]:
+    """
+    Interactive selection of CIF phases with preview plots.
+    """
+    phase_path = Path(phases_dir)
+    cif_files = sorted(phase_path.glob("*.cif"))
+    if not cif_files:
+        print(f"[WARN] В каталоге {phases_dir} нет CIF-файлов.")
+        return []
+
+    print("\nВыбор фаз (CIF):")
+    for i, p in enumerate(cif_files, 1):
+        print(f"[{i}] {p.name}")
+    print("[0] Закончить выбор")
+
+    ref_db: list[pd.DataFrame] = []
+
+    while True:
+        choice = input("Выберите номер CIF для просмотра/добавления (0 — закончить): ").strip()
+        if choice == "0":
+            break
+        if not choice.isdigit():
+            continue
+        idx = int(choice)
+        if not (1 <= idx <= len(cif_files)):
+            continue
+
+        cif_path = cif_files[idx - 1]
+        print(f"\nЗагружаю {cif_path.name}...")
+
+        try:
+            ref_df = build_ref_pattern_from_cif(str(cif_path), interval_2theta=(20.0, 60.0))
+        except Exception as exc:
+            print(f"[WARN] Не удалось разобрать {cif_path.name}: {exc}")
+            continue
+
+        # Показать формулу, если возможно
+        try:
+            from pymatgen.core import Structure
+
+            struct = Structure.from_file(str(cif_path))
+            print("Фаза:", struct.composition.reduced_formula)
+        except Exception:
+            pass
+
+        # Plot reference pattern (vertical sticks) and optional experimental spectrum
+        plot_ref_preview(
+            ref_df["two_theta"],
+            ref_df["intensity"],
+            exp_two_theta=exp_two_theta,
+            exp_intensity=exp_intensity,
+            title=cif_path.name,
+        )
+
+        yn = input("Добавить эту фазу в анализ? [Y/n]: ").strip().lower()
+        if yn in ("", "y", "yes"):
+            ref_db.append(ref_df)
+            print(f"Фаза {cif_path.name} добавлена.")
+
+    return ref_db
 
 
 def interactive_session() -> None:
@@ -294,7 +371,31 @@ def interactive_session() -> None:
         print(peak_table)
         print(f"Индекс кристалличности CI = {ci:.1f} %")
 
-        plot_fit(spec["x"], spec["y"], output.best_fit)
+        # Фазовый анализ
+        do_phase = input("Выполнить фазовый анализ (CIF)? [y/N]: ").strip().lower()
+        if do_phase in ("y", "yes"):
+            ref_db = select_phases_menu(
+                phases_dir="CIF",
+                exp_two_theta=df_proc["two_theta"].values,
+                exp_intensity=df_proc["intensity"].values,
+            )
+            if ref_db:
+                ranking = search_match_all_phases(peak_table, ref_db=ref_db)
+                print("\nРанжирование фаз по FoM:")
+                print(ranking)
+
+                matches = annotate_peaks_with_phases(peak_table, ref_db=ref_db)
+                peak_table["phase_id"] = None
+                for _, row in matches.iterrows():
+                    exp_idx = row.get("exp_index")
+                    if exp_idx in peak_table.index:
+                        peak_table.at[exp_idx, "phase_id"] = row["phase_id"]
+                print("\nПики с фазовой разметкой:")
+                print(peak_table[["prefix", "center", "fwhm", "crystal_size_nm", "phase_id"]])
+            else:
+                print("Фазы не выбраны, фазовый анализ пропущен.")
+
+        plot_fit_with_phase_markers(spec["x"], spec["y"], output.best_fit, peak_table)
 
         save_choice = input("Сохранить результаты в файлы? [Y/n]: ").strip().lower()
         if save_choice in ("", "y", "yes"):

@@ -9,7 +9,7 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
-import pymatgen as mp
+from pymatgen.core import Structure
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
 
 from src.utils.preprocessing import normalize_intensity, trim_2theta
@@ -27,7 +27,7 @@ def build_ref_pattern_from_cif(
     if not os.path.isfile(cif_path):
         raise FileNotFoundError(f"build_ref_pattern_from_cif: file not found: {cif_path}")
 
-    struct = mp.Structure.from_file(cif_path)
+    struct = Structure.from_file(cif_path)
     calc = XRDCalculator()
     pattern = calc.get_pattern(struct)
 
@@ -50,6 +50,7 @@ def _greedy_match_peaks(
     Greedy one-to-one matching of experimental and reference peaks within tolerance.
     """
     exp = exp_peaks[["center", "height"]].dropna().copy()
+    exp["exp_index"] = exp.index
     ref = ref_peaks[["two_theta", "intensity"]].dropna().copy()
 
     exp["intensity_norm"] = normalize_data(exp["height"].values)
@@ -73,6 +74,7 @@ def _greedy_match_peaks(
 
         matches.append(
             dict(
+                exp_index=int(row["exp_index"]),
                 center_exp=x0,
                 height_exp=float(row["height"]),
                 intensity_exp_norm=float(row["intensity_norm"]),
@@ -153,3 +155,50 @@ def search_match_all_phases(
         result = result.sort_values("FoM", ascending=True).reset_index(drop=True)
     return result
 
+
+def annotate_peaks_with_phases(
+    exp_peaks: pd.DataFrame,
+    ref_db: Iterable[pd.DataFrame],
+    delta_2theta_max: float = 0.2,
+) -> pd.DataFrame:
+    """
+    Annotate each experimental peak with the best matching phase by minimal dtheta/intensity diff.
+
+    Returns DataFrame with columns:
+        exp_index, center_exp, phase_id, dtheta, intensity_diff
+    """
+    rows: list[dict] = []
+
+    for idx_phase, ref_df in enumerate(ref_db):
+        phase_id = ref_df.attrs.get("phase_id") or ref_df.get("id")
+        if isinstance(phase_id, pd.Series):
+            phase_id = phase_id.iloc[0]
+        if phase_id is None:
+            phase_id = f"phase_{idx_phase}"
+
+        matches = _greedy_match_peaks(exp_peaks, ref_df, delta_2theta_max=delta_2theta_max)
+        if matches.empty:
+            continue
+
+        for _, mrow in matches.iterrows():
+            rows.append(
+                dict(
+                    exp_index=int(mrow["exp_index"]) if "exp_index" in mrow else None,
+                    center_exp=mrow["center_exp"],
+                    phase_id=phase_id,
+                    dtheta=mrow["dtheta"],
+                    intensity_diff=float(
+                        abs(mrow["intensity_exp_norm"] - mrow["intensity_ref_norm"])
+                    ),
+                )
+            )
+
+    if not rows:
+        return pd.DataFrame()
+
+    all_matches = pd.DataFrame(rows)
+    all_matches = all_matches.sort_values(
+        by=["exp_index", "dtheta", "intensity_diff"], ascending=[True, True, True]
+    )
+    best = all_matches.groupby("exp_index", as_index=False).first()
+    return best
