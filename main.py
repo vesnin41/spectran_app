@@ -15,6 +15,7 @@ from src.utils.peak_metrics import (
     compute_total_area,
     fitted_peaks_from_table,
     select_crystalline_peaks,
+    reclassify_amorphous_by_width,
 )
 from src.utils.preprocessing import (
     apply_savgol,
@@ -211,12 +212,9 @@ def process_spectrum(
     peak_table["crystal_size_nm"] = peak_table.apply(
         lambda row: get_crystallite_size_scherrer(row["fwhm"], row["center"]), axis=1
     )
-    if "is_amorphous" in peak_table.columns:
-        peak_table["is_crystalline"] = ~peak_table["is_amorphous"].astype(bool)
-    elif "kind" in peak_table.columns:
-        peak_table["is_crystalline"] = peak_table["kind"].astype(str) == "crystalline"
-    else:
-        peak_table["is_crystalline"] = select_crystalline_peaks(peak_table)
+
+    peak_table, fwhm_thr = reclassify_amorphous_by_width(peak_table)
+    print(f"FWHM threshold for amorphous reclass: {fwhm_thr:.2f} deg 2θ")
 
     ci_value = compute_ci(
         df["two_theta"].values,
@@ -272,7 +270,7 @@ def process_spectrum(
         )
 
     # Plot result with components
-    plot_fit_with_components(spec["x"], spec["y"], output, spec=spec)
+    plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table)
 
 
 def main() -> None:

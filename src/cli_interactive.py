@@ -20,7 +20,7 @@ from src.analysis.phase_summary import aggregate_phase_results, compute_area_fra
 
 from src.fitting import fit_model, generate_spec
 from src.reading.data_from import spectrum_from_csv
-from src.utils.peak_metrics import compute_ci, fitted_peaks_from_table
+from src.utils.peak_metrics import compute_ci, fitted_peaks_from_table, reclassify_amorphous_by_width
 from src.utils.preprocessing import (
     apply_savgol,
     normalize_intensity,
@@ -116,7 +116,7 @@ def save_results(
     plt.close(fig)
 
     # Components plot
-    fig_comp, _ = plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, show=False)
+    fig_comp, _ = plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table, show=False)
     fig_comp.savefig(result_dir / "fit_components.png", dpi=300)
     plt.close(fig_comp)
 
@@ -407,17 +407,8 @@ def interactive_session() -> None:
             lambda row: get_crystallite_size_scherrer(row["fwhm"], row["center"]),
             axis=1,
         )
-        if "is_amorphous" in peak_table.columns:
-            peak_table["is_crystalline"] = ~peak_table["is_amorphous"].astype(bool)
-        elif "kind" in peak_table.columns:
-            peak_table["is_crystalline"] = peak_table["kind"].astype(str) == "crystalline"
-        else:
-            peak_table["is_crystalline"] = select_crystalline_peaks(
-                peak_table,
-                fwhm_min=CONFIG.ci_fwhm_min,
-                fwhm_max=CONFIG.ci_fwhm_max,
-                rel_height_min=CONFIG.rel_height_min,
-            )
+        peak_table, fwhm_thr = reclassify_amorphous_by_width(peak_table)
+        print(f"Порог FWHM для аморфных компонент: {fwhm_thr:.2f}° 2θ")
 
         ci = compute_ci(
             df_proc["two_theta"].values,
@@ -482,7 +473,7 @@ def interactive_session() -> None:
                 f"Кристалличность: {fractions['x_cryst']*100:.1f} %, аморфность: {fractions['x_amorph']*100:.1f} %"
             )
 
-        plot_fit_with_components(spec["x"], spec["y"], output, spec=spec)
+        plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table)
         plot_fit_with_phase_markers(spec["x"], spec["y"], output.best_fit, peak_table)
 
         save_choice = input("Сохранить результаты в файлы? [Y/n]: ").strip().lower()

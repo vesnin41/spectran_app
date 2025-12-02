@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from src.config import CONFIG
+
 
 @dataclass
 class FittedPeak:
@@ -94,6 +96,61 @@ def fitted_peaks_from_table(peak_table: pd.DataFrame) -> list[FittedPeak]:
             )
         )
     return peaks
+
+
+def reclassify_amorphous_by_width(
+    peak_table: pd.DataFrame,
+    width_factor: float | None = None,
+    min_fwhm_amorph: float | None = None,
+    min_crystal_size_nm: float | None = None,
+) -> tuple[pd.DataFrame, float]:
+    """
+    Post-fit heuristic: mark very broad peaks as amorphous based on FWHM.
+
+    Returns (updated_df, fwhm_threshold_used).
+    """
+    df = peak_table.copy()
+    width_factor = CONFIG.amorph_width_factor if width_factor is None else width_factor
+    min_fwhm_amorph = CONFIG.amorph_fwhm_min if min_fwhm_amorph is None else min_fwhm_amorph
+    min_crystal_size_nm = CONFIG.min_crystal_size_nm if min_crystal_size_nm is None else min_crystal_size_nm
+
+    # Ensure flags exist
+    if "is_amorphous" not in df.columns:
+        df["is_amorphous"] = False
+    if "kind" not in df.columns:
+        df["kind"] = ""
+    if "is_crystalline" not in df.columns:
+        df["is_crystalline"] = True
+    else:
+        df["is_crystalline"] = df["is_crystalline"].fillna(True)
+
+    # Determine baseline FWHM from crystalline-kind peaks
+    base = df[df["kind"].astype(str) == "crystalline"]
+    base_fwhm = base["fwhm"].replace([np.inf, -np.inf], np.nan)
+    med_fwhm = float(base_fwhm.median()) if not base_fwhm.dropna().empty else np.nan
+    if not np.isfinite(med_fwhm) or med_fwhm <= 0:
+        med_fwhm = float(df["fwhm"].replace([np.inf, -np.inf], np.nan).median())
+    if not np.isfinite(med_fwhm) or med_fwhm <= 0:
+        med_fwhm = min_fwhm_amorph
+
+    fwhm_threshold = max(min_fwhm_amorph, med_fwhm * width_factor)
+
+    wide_mask = df["fwhm"] >= fwhm_threshold
+    df.loc[wide_mask, "is_amorphous"] = True
+    df.loc[wide_mask, "is_crystalline"] = False
+    df.loc[wide_mask, "kind"] = "amorphous"
+
+    # Update crystalline flag for remaining peaks (drop too small crystallites)
+    df.loc[df["is_amorphous"].astype(bool), "is_crystalline"] = False
+    size_col = None
+    if "crystal_size_nm" in df.columns:
+        size_col = "crystal_size_nm"
+    elif "cryst_size_nm" in df.columns:
+        size_col = "cryst_size_nm"
+    if size_col and min_crystal_size_nm is not None:
+        df.loc[df[size_col] < min_crystal_size_nm, "is_crystalline"] = False
+
+    return df, fwhm_threshold
 
 
 def select_crystalline_peaks(

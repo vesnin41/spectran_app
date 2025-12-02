@@ -94,6 +94,7 @@ def plot_fit_with_components(
     intensity: np.ndarray,
     result,
     spec: dict | None = None,
+    peak_table=None,
     title: str = "Фит с компонентами",
     show: bool = True,
 ):
@@ -105,7 +106,16 @@ def plot_fit_with_components(
     ax.plot(two_theta, result.best_fit, label="Суммарный фит", linewidth=1.2, color="C1")
 
     kind_by_prefix = {}
-    if spec is not None and isinstance(spec, dict) and "model" in spec:
+    if peak_table is not None and hasattr(peak_table, "iterrows"):
+        for idx, row in peak_table.iterrows():
+            prefix = str(row.get("prefix", f"m{idx}_"))
+            if "is_amorphous" in row:
+                if bool(row["is_amorphous"]):
+                    kind_by_prefix[prefix] = "amorphous"
+                    continue
+            if "kind" in row:
+                kind_by_prefix[prefix] = str(row["kind"])
+    if not kind_by_prefix and spec is not None and isinstance(spec, dict) and "model" in spec:
         for i, model_def in enumerate(spec["model"]):
             prefix = f"m{i}_"
             kind_by_prefix[prefix] = (model_def.get("meta") or {}).get("kind", "")
