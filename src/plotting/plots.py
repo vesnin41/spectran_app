@@ -89,6 +89,51 @@ def plot_fit(
     return fig, ax
 
 
+def plot_fit_with_components(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    result,
+    spec: dict | None = None,
+    title: str = "Фит с компонентами",
+    show: bool = True,
+):
+    """
+    Plot experimental spectrum, total fit, and individual components.
+    """
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(two_theta, intensity, label="Эксперимент", linewidth=1.0)
+    ax.plot(two_theta, result.best_fit, label="Суммарный фит", linewidth=1.2, color="C1")
+
+    kind_by_prefix = {}
+    if spec is not None and isinstance(spec, dict) and "model" in spec:
+        for i, model_def in enumerate(spec["model"]):
+            prefix = f"m{i}_"
+            kind_by_prefix[prefix] = (model_def.get("meta") or {}).get("kind", "")
+
+    comps = result.eval_components(x=two_theta)
+    for prefix, y_comp in comps.items():
+        kind = kind_by_prefix.get(prefix, "")
+        if kind == "amorphous":
+            style = {"linestyle": "-", "linewidth": 1.4, "alpha": 0.9, "color": "C2"}
+            label = f"{prefix} (amorph)"
+        else:
+            style = {"linestyle": "--", "linewidth": 0.8, "alpha": 0.6}
+            label = prefix
+        ax.plot(two_theta, y_comp, label=label, **style)
+
+    ax.set_xlabel("2θ, град", fontsize=12)
+    ax.set_ylabel("Интенсивность, отн. ед.", fontsize=12)
+    if title:
+        ax.set_title(title, fontsize=12)
+    ax.legend(fontsize=8, ncol=2)
+    ax.tick_params(axis="both", which="major", labelsize=10)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    if show:
+        plt.show()
+    return fig, ax
+
+
 def plot_fit_with_phase_markers(
     two_theta: np.ndarray,
     intensity: np.ndarray,

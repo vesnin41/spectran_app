@@ -1,46 +1,39 @@
 import numpy as np
-import pandas as pd
 
-from src.fitting import generate_spec
-from src.utils.peak_profiles import gaussian
+from src.fitting.generate_spec import Peak, build_model_from_peaks, detect_peaks
 
 
-def make_synthetic_df():
-    x = np.linspace(20, 60, 2000)
-    y = gaussian(x, amplitude=100, center=30, sigma=0.1) + gaussian(
-        x, amplitude=80, center=45, sigma=0.15
-    )
-    y += np.random.default_rng(0).normal(0, 0.5, size=x.size)
-    return pd.DataFrame({"two_theta": x, "intensity": y})
-
-
-def test_default_spec_shapes():
-    df = make_synthetic_df()
-    models_arr = [{"type": "GaussianModel"} for _ in range(5)]
-
-    spec = generate_spec.default_spec(df, models_arr)
-
-    assert np.array_equal(spec["x"], df["two_theta"].values)
-    assert np.array_equal(spec["y"], df["intensity"].values)
-    assert len(spec["model"]) == 5
-
-
-def test_update_spec_from_peaks_fills_params():
-    df = make_synthetic_df()
-    models_arr = [{"type": "GaussianModel"} for _ in range(5)]
-    spec = generate_spec.default_spec(df, models_arr)
-
-    spec, peaks = generate_spec.update_spec_from_peaks(
-        spec,
-        model_indicies=list(range(5)),
-        peak_widths=(3, 40),
-        method="find_peaks",
+def test_detect_peaks_returns_positions_and_width():
+    x = np.linspace(10, 20, 500)
+    y = (
+        np.exp(-0.5 * ((x - 12.0) / 0.1) ** 2)
+        + 1.5 * np.exp(-0.5 * ((x - 17.0) / 0.15) ** 2)
     )
 
-    assert len(peaks) > 0
-    for idx, model in enumerate(spec["model"]):
-        params = model.get("params", {})
-        if idx < len(peaks):
-            assert "center" in params and "sigma" in params and "height" in params
-        else:
-            assert params == {}
+    peaks = detect_peaks(x, y, width_range=(3, 80), rel_height_min=0.1, prominence_rel=0.05)
+    assert len(peaks) == 2
+
+    centers = sorted([p.two_theta for p in peaks])
+    assert np.isclose(centers[0], 12.0, atol=0.1)
+    assert np.isclose(centers[1], 17.0, atol=0.1)
+    assert all(p.fwhm_est > 0 for p in peaks)
+
+
+def test_build_model_from_peaks_counts_extra_and_amorph():
+    peaks = [
+        Peak(index=0, two_theta=10.0, height=5.0, fwhm_est=0.2),
+        Peak(index=1, two_theta=20.0, height=2.5, fwhm_est=0.25),
+    ]
+    models = build_model_from_peaks(
+        peaks,
+        model_type="GaussianModel",
+        two_theta=np.linspace(5, 25, 200),
+        intensity=np.ones(200),
+        extra_components=3,
+        amorph_components=1,
+    )
+
+    assert len(models) == 5  # 2 peaks + 3 extra
+    amorph_sigma = [m["params"]["sigma"] for m in models if m.get("param_hints")]
+    narrow_sigma = [m["params"]["sigma"] for m in models if not m.get("param_hints")]
+    assert amorph_sigma and max(amorph_sigma) > max(narrow_sigma)

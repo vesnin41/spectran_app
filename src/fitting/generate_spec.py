@@ -1,8 +1,21 @@
 # src/fitting/generate_spec.py
+from dataclasses import dataclass
+from typing import Iterable, List, Tuple
 
 import numpy as np
 from scipy import signal
-from typing import Tuple
+
+from src.config import CONFIG
+
+
+@dataclass
+class Peak:
+    """Detected peak with position, height, and estimated FWHM."""
+
+    index: int
+    two_theta: float
+    height: float
+    fwhm_est: float
 
 
 def _detect_peaks_find_peaks(
@@ -13,7 +26,7 @@ def _detect_peaks_find_peaks(
     prominence: float | None = None,
     prominence_rel: float | None = None,
     distance: int | None = None,
-) -> np.ndarray:
+) -> Tuple[np.ndarray, dict]:
     """
     Robust peak detection for XRD using scipy.signal.find_peaks.
 
@@ -33,11 +46,11 @@ def _detect_peaks_find_peaks(
     """
     y = np.asarray(y, dtype=float)
     if y.size == 0:
-        return np.array([], dtype=int)
+        return np.array([], dtype=int), {}
 
     y_max = float(np.max(y))
     if y_max <= 0:
-        return np.array([], dtype=int)
+        return np.array([], dtype=int), {}
 
     height = rel_height_min * y_max if rel_height_min is not None else None
     prom = prominence if prominence is not None else (
@@ -49,7 +62,7 @@ def _detect_peaks_find_peaks(
         wmin, wmax = width_range
         width = (max(1, int(wmin)), max(1, int(wmax)))
 
-    peaks, _ = signal.find_peaks(
+    peaks, properties = signal.find_peaks(
         y,
         height=height,
         prominence=prom,
@@ -57,7 +70,7 @@ def _detect_peaks_find_peaks(
         distance=distance,
     )
 
-    return peaks.astype(int)
+    return peaks.astype(int), properties
 
 
 def default_spec(df, models_arr):
@@ -82,6 +95,181 @@ def default_spec(df, models_arr):
     }
 
 
+def detect_peaks(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    width_range: Tuple[int, int] | None = None,
+    rel_height_min: float | None = None,
+    prominence: float | None = None,
+    prominence_rel: float | None = None,
+    distance: int | None = None,
+) -> List[Peak]:
+    """
+    Detect peaks on a preprocessed spectrum and estimate FWHM.
+    """
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+
+    if x.size == 0 or y.size == 0 or x.size != y.size:
+        return []
+
+    if width_range is not None:
+        width_range = (int(width_range[0]), int(width_range[1]))
+    rel_height_min = CONFIG.rel_height_min if rel_height_min is None else rel_height_min
+    if prominence_rel is None:
+        prominence_rel = CONFIG.prominence_rel
+
+    dist_pts = distance
+    if dist_pts is None and width_range is not None:
+        dist_pts = max(1, width_range[0])
+
+    peaks_idx, properties = _detect_peaks_find_peaks(
+        x,
+        y,
+        width_range=width_range,
+        rel_height_min=rel_height_min,
+        prominence=prominence,
+        prominence_rel=prominence_rel,
+        distance=dist_pts,
+    )
+
+    if peaks_idx.size == 0:
+        return []
+
+    if x.size > 1:
+        dx = float((x.max() - x.min()) / (len(x) - 1))
+    else:
+        dx = 1.0
+
+    if peaks_idx.size:
+        widths_result = signal.peak_widths(y, peaks_idx, rel_height=0.5)
+        widths = widths_result[0]  # in sample points
+    else:
+        widths = None
+    if widths is None or len(widths) == 0:
+        # Use half of min width points as fallback
+        widths = np.full_like(peaks_idx, fill_value=(width_range[0] if width_range else 1), dtype=float)
+
+    fwhm_vals = np.asarray(widths, dtype=float) * dx
+
+    return [
+        Peak(
+            index=int(idx),
+            two_theta=float(x[idx]),
+            height=float(y[idx]),
+            fwhm_est=float(fwhm),
+        )
+        for idx, fwhm in zip(peaks_idx.tolist(), fwhm_vals.tolist())
+    ]
+
+
+def _guess_sigma_from_fwhm(fwhm: float, fallback: float) -> float:
+    return float(fwhm / 2.3548) if fwhm > 0 else fallback
+
+
+def build_model_from_peaks(
+    peaks: List[Peak],
+    model_type: str = "GaussianModel",
+    two_theta: Iterable[float] | None = None,
+    intensity: Iterable[float] | None = None,
+    extra_components: int = 0,
+    amorph_components: int = 1,
+) -> list[dict]:
+    """
+    Build model definitions using detected peaks + extra/amorph components.
+    """
+    peaks_sorted = sorted(peaks, key=lambda p: p.height, reverse=True)
+    two_theta_arr = np.asarray(list(two_theta) if two_theta is not None else [], dtype=float)
+    intensity_arr = np.asarray(list(intensity) if intensity is not None else [], dtype=float)
+
+    tmin = float(np.min(two_theta_arr)) if two_theta_arr.size else 0.0
+    tmax = float(np.max(two_theta_arr)) if two_theta_arr.size else 1.0
+    y_max = float(np.max(intensity_arr)) if intensity_arr.size else 1.0
+    tmid = 0.5 * (tmin + tmax)
+
+    def _fallback_sigma():
+        span = max(tmax - tmin, 1.0)
+        return span * 0.01
+
+    models = []
+
+    sigma_cryst_values = []
+    for pk in peaks_sorted:
+        sigma = _guess_sigma_from_fwhm(pk.fwhm_est, _fallback_sigma())
+        sigma_cryst_values.append(sigma)
+        amplitude = abs(pk.height) * abs(sigma) * np.sqrt(2 * np.pi)
+        models.append(
+            {
+                "type": model_type,
+                "params": {
+                    "center": pk.two_theta,
+                    "sigma": sigma,
+                    "height": max(pk.height, 1e-3),
+                    "amplitude": amplitude,
+                },
+                "meta": {"kind": "crystalline"},
+            }
+        )
+
+    sigma_med = float(np.median(sigma_cryst_values)) if sigma_cryst_values else _fallback_sigma()
+    sigma_wide = max(sigma_med * CONFIG.amorph_sigma_scale, _fallback_sigma() * 3.0)
+
+    extra_components = max(extra_components, 0)
+    amorph_components = max(amorph_components, 0)
+    amorph_to_place = min(amorph_components, extra_components)
+    extra_narrow = extra_components - amorph_to_place
+
+    # Amorphous broad components
+    for i in range(amorph_to_place):
+        center = tmid if peaks_sorted == [] else float(np.mean([p.two_theta for p in peaks_sorted]))
+        # Slightly shift if more than one amorphous component
+        if amorph_to_place > 1:
+            shift = (i - (amorph_to_place - 1) / 2) * sigma_med * 1.5
+            center += shift
+            center = float(np.clip(center, tmin, tmax))
+
+        height = CONFIG.amorph_height_fraction * y_max if y_max > 0 else 1.0
+        amplitude = abs(height) * abs(sigma_wide) * np.sqrt(2 * np.pi)
+        models.append(
+            {
+                "type": model_type,
+                "params": {
+                    "center": center,
+                    "sigma": sigma_wide,
+                    "height": height,
+                    "amplitude": amplitude,
+                },
+                "param_hints": {
+                    "sigma": {"min": sigma_med * CONFIG.amorph_sigma_min_mult},
+                    "height": {"min": 0},
+                },
+                "meta": {"kind": "amorphous"},
+            }
+        )
+
+    # Extra narrow/medium components spread across range
+    if extra_narrow > 0:
+        centers_grid = np.linspace(tmin, tmax, extra_narrow + 2)[1:-1] if extra_narrow > 1 else [tmid]
+        for ctr in centers_grid:
+            sigma = sigma_med
+            height = CONFIG.extra_height_fraction * y_max if y_max > 0 else 1.0
+            amplitude = abs(height) * abs(sigma) * np.sqrt(2 * np.pi)
+            models.append(
+                {
+                    "type": model_type,
+                    "params": {
+                        "center": float(ctr),
+                        "sigma": sigma,
+                        "height": height,
+                        "amplitude": amplitude,
+                    },
+                    "meta": {"kind": "crystalline"},
+                }
+            )
+
+    return models
+
+
 def update_spec_from_peaks(
     spec,
     model_indicies,
@@ -97,6 +285,7 @@ def update_spec_from_peaks(
     """
     x = np.asarray(spec["x"], dtype=float)
     y = np.asarray(spec["y"], dtype=float)
+    properties = {}
 
     if method == "find_peaks":
         if isinstance(peak_widths, tuple) and len(peak_widths) == 2:
@@ -108,7 +297,7 @@ def update_spec_from_peaks(
         if dist_pts is None and width_range is not None:
             dist_pts = max(1, width_range[0])
 
-        peaks = _detect_peaks_find_peaks(
+        peaks, properties = _detect_peaks_find_peaks(
             x,
             y,
             width_range=width_range,
@@ -149,11 +338,13 @@ def update_spec_from_peaks(
         dx = (x.max() - x.min()) / (len(x) - 1)
     else:
         dx = 1.0
-    if isinstance(peak_widths, tuple) and len(peak_widths) == 2:
-        min_width_pts = peak_widths[0]
+    widths = properties.get("widths") if method == "find_peaks" else None
+    if widths is not None and len(widths) > 0:
+        approx_fwhm = np.median(np.asarray(widths, dtype=float)) * dx
+    elif isinstance(peak_widths, tuple) and len(peak_widths) == 2:
+        approx_fwhm = dx * peak_widths[0]
     else:
-        min_width_pts = 1
-    approx_fwhm = dx * min_width_pts
+        approx_fwhm = dx
     sigma_guess = approx_fwhm / 2.3548 if approx_fwhm > 0 else dx
 
     # Initialize models

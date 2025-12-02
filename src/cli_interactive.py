@@ -15,9 +15,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from src.config import CONFIG
 
+from src.analysis.phase_assign import assign_phases_to_peaks
+from src.analysis.phase_summary import aggregate_phase_results, compute_area_fractions
+
 from src.fitting import fit_model, generate_spec
 from src.reading.data_from import spectrum_from_csv
-from src.utils.peak_metrics import compute_ci
+from src.utils.peak_metrics import compute_ci, fitted_peaks_from_table
 from src.utils.preprocessing import (
     apply_savgol,
     normalize_intensity,
@@ -30,6 +33,7 @@ from src.plotting.plots import (
     plot_with_peaks,
     plot_fit,
     plot_fit_with_phase_markers,
+    plot_fit_with_components,
     plot_ref_preview,
 )
 from src.utils.peak_metrics import select_crystalline_peaks
@@ -102,11 +106,25 @@ def save_results(
     result_dir.mkdir(parents=True, exist_ok=True)
 
     peak_table.to_csv(result_dir / "peak_table.csv", index=False)
+    # Save experimental and fitted curve
+    fit_df = pd.DataFrame({"two_theta": spec["x"], "intensity": spec["y"], "best_fit": output.best_fit})
+    fit_df.to_csv(result_dir / "fit_curve.csv", index=False)
 
     # Fit plot
     fig, _ = plot_fit(spec["x"], spec["y"], output.best_fit, show=False)
     fig.savefig(result_dir / "fit.png", dpi=300)
     plt.close(fig)
+
+    # Components plot
+    fig_comp, _ = plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, show=False)
+    fig_comp.savefig(result_dir / "fit_components.png", dpi=300)
+    plt.close(fig_comp)
+
+    # Phase markers plot (if phase_id present)
+    if "phase_id" in peak_table.columns:
+        fig_phase, _ = plot_fit_with_phase_markers(spec["x"], spec["y"], output.best_fit, peak_table, show=False)
+        fig_phase.savefig(result_dir / "fit_phases.png", dpi=300)
+        plt.close(fig_phase)
 
     # Raw vs processed if available in cfg
     if preprocessing_cfg.get("raw_two_theta") is not None:
@@ -322,7 +340,8 @@ def interactive_session() -> None:
                 mt_choice, "GaussianModel"
             )
 
-            models_count = ask_int("Максимальное число пиков (по умолчанию 40): ", default=40)
+            extra_components = ask_int("Дополнительные компоненты сверх найденных пиков (по умолчанию 4): ", default=4)
+            amorph_components = ask_int("Сколько из них оставить под аморфный горб (по умолчанию 1): ", default=1)
 
             wmin = ask_int("Минимальная ширина пиков в точках (по умолчанию 3): ", default=3)
             wmax = ask_int("Максимальная ширина пиков в точках (по умолчанию 40): ", default=40)
@@ -330,20 +349,35 @@ def interactive_session() -> None:
                 wmax = wmin + 1
             peak_widths_arr = (wmin, wmax)
 
-            models_arr = [{"type": models_type} for _ in range(models_count)]
-            spec = generate_spec.default_spec(df_proc, models_arr)
-            spec, peaks_found = generate_spec.update_spec_from_peaks(
-                spec,
-                list(range(models_count)),
-                peak_widths=peak_widths_arr,
-                method="find_peaks",
+            peaks_detected = generate_spec.detect_peaks(
+                df_proc["two_theta"].values,
+                df_proc["intensity"].values,
+                width_range=peak_widths_arr,
+                rel_height_min=CONFIG.rel_height_min,
+                prominence_rel=0.02,
             )
-            print(f"Найдено пиков: {len(peaks_found)}")
+            peak_indices = np.array([p.index for p in peaks_detected], dtype=int) if peaks_detected else np.array([], dtype=int)
+            print(f"Найдено пиков: {len(peaks_detected)}")
 
-            plot_with_peaks(spec["x"], spec["y"], peaks_found)
+            models_arr = generate_spec.build_model_from_peaks(
+                peaks_detected,
+                model_type=models_type,
+                two_theta=df_proc["two_theta"].values,
+                intensity=df_proc["intensity"].values,
+                extra_components=extra_components,
+                amorph_components=amorph_components,
+            )
+            spec = generate_spec.default_spec(df_proc, models_arr)
+            print(
+                f"Компоненты модели: всего={len(models_arr)} "
+                f"(кристаллических={len(peaks_detected)}, аморфных={min(amorph_components, extra_components)}, "
+                f"запасных={max(extra_components - min(amorph_components, extra_components), 0)})"
+            )
+
+            plot_with_peaks(spec["x"], spec["y"], peak_indices)
 
             next_action = input(
-                "Что дальше? [1] Фит  [2] Изменить число пиков  [3] Изменить ширины поиска  [0] Назад: "
+                "Что дальше? [1] Фит  [2] Изменить extra/amorph  [3] Изменить ширины поиска  [0] Назад: "
             ).strip()
             if next_action in ("1", ""):
                 break
@@ -373,12 +407,17 @@ def interactive_session() -> None:
             lambda row: get_crystallite_size_scherrer(row["fwhm"], row["center"]),
             axis=1,
         )
-        peak_table["is_crystalline"] = select_crystalline_peaks(
-            peak_table,
-            fwhm_min=CONFIG.ci_fwhm_min,
-            fwhm_max=CONFIG.ci_fwhm_max,
-            rel_height_min=CONFIG.rel_height_min,
-        )
+        if "is_amorphous" in peak_table.columns:
+            peak_table["is_crystalline"] = ~peak_table["is_amorphous"].astype(bool)
+        elif "kind" in peak_table.columns:
+            peak_table["is_crystalline"] = peak_table["kind"].astype(str) == "crystalline"
+        else:
+            peak_table["is_crystalline"] = select_crystalline_peaks(
+                peak_table,
+                fwhm_min=CONFIG.ci_fwhm_min,
+                fwhm_max=CONFIG.ci_fwhm_max,
+                rel_height_min=CONFIG.rel_height_min,
+            )
 
         ci = compute_ci(
             df_proc["two_theta"].values,
@@ -394,6 +433,7 @@ def interactive_session() -> None:
 
         # Фазовый анализ
         do_phase = input("Выполнить фазовый анализ (CIF)? [y/N]: ").strip().lower()
+        ref_db = []
         if do_phase in ("y", "yes"):
             ref_db = select_phases_menu(
                 phases_dir="CIF",
@@ -410,14 +450,44 @@ def interactive_session() -> None:
                     peak_table, ref_db=ref_db, delta_2theta_max=CONFIG.delta_2theta_max
                 )
                 print("\nПики с фазовой разметкой:")
-                print(peak_table[["prefix", "center", "fwhm", "crystal_size_nm", "phase_id", "dtheta_match", "intensity_diff"]])
+                print(
+                    peak_table[
+                        ["prefix", "center", "fwhm", "crystal_size_nm", "phase_id", "dtheta_match", "intensity_diff"]
+                    ]
+                )
             else:
                 print("Фазы не выбраны, фазовый анализ пропущен.")
 
+        fitted_peaks = fitted_peaks_from_table(peak_table)
+        assign_phases_to_peaks(fitted_peaks, ref_db=ref_db, max_delta_two_theta=CONFIG.delta_2theta_max)
+        phase_results = aggregate_phase_results(fitted_peaks)
+        fractions = compute_area_fractions(fitted_peaks)
+        if fractions["area_total"] > 0:
+            print("\nСводка по фазам (по площади):")
+            header = f"{'Фаза':15s} {'N':>3s} {'Σплощадь':>10s} {'D_ср, нм':>10s} {'Доля,%':>9s} {'Крист.,%':>9s}"
+            print(header)
+            print("-" * len(header))
+            for pr in sorted(phase_results, key=lambda p: p.area_total, reverse=True):
+                area_pct = 100.0 * pr.area_total / fractions["area_total"] if fractions["area_total"] else 0.0
+                cryst_pct = 0.0
+                if pr.phase_id != "amorphous" and fractions["area_cryst"] > 0:
+                    cryst_pct = 100.0 * pr.area_total / fractions["area_cryst"]
+                d_avg = pr.mean_crystallite_size()
+                d_str = f"{d_avg:.2f}" if d_avg is not None else "--"
+                print(
+                    f"{pr.phase_id:15s} {pr.n_peaks:3d} {pr.area_total:10.3f} {d_str:>10s} {area_pct:9.1f} {cryst_pct:9.1f}"
+                )
+            print("-" * len(header))
+            print(
+                f"Кристалличность: {fractions['x_cryst']*100:.1f} %, аморфность: {fractions['x_amorph']*100:.1f} %"
+            )
+
+        plot_fit_with_components(spec["x"], spec["y"], output, spec=spec)
         plot_fit_with_phase_markers(spec["x"], spec["y"], output.best_fit, peak_table)
 
         save_choice = input("Сохранить результаты в файлы? [Y/n]: ").strip().lower()
         if save_choice in ("", "y", "yes"):
+            models_count = len(spec.get("model", []))
             fit_cfg = {
                 "model_type": models_type,
                 "models_count": models_count,

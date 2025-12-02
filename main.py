@@ -4,11 +4,18 @@ import uuid
 
 import numpy as np
 
+from src.analysis.phase_assign import assign_phases_to_peaks
+from src.analysis.phase_summary import aggregate_phase_results, compute_area_fractions
 from src.config import CONFIG
 from src.fitting import fit_model, generate_spec
-from src.plotting.plots import plot_fit
+from src.plotting.plots import plot_fit, plot_fit_with_components
 from src.reading.data_from import spectrum_from_csv
-from src.utils.peak_metrics import compute_ci, compute_total_area, select_crystalline_peaks
+from src.utils.peak_metrics import (
+    compute_ci,
+    compute_total_area,
+    fitted_peaks_from_table,
+    select_crystalline_peaks,
+)
 from src.utils.preprocessing import (
     apply_savgol,
     normalize_intensity,
@@ -53,9 +60,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-n",
         "--models_count",
-        help="Maximum number of peak models to allocate",
+        help="Deprecated: legacy cap on number of models (auto-peaks mode ignores unless provided).",
         type=int,
-        default=40,
+        default=None,
     )
     parser.add_argument(
         "--peak_width_min",
@@ -69,6 +76,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=30,
     )
+    parser.add_argument(
+        "--extra-components",
+        help="Number of extra components to add on top of detected peaks.",
+        type=int,
+        default=4,
+    )
+    parser.add_argument(
+        "--amorph-components",
+        help="How many of the extra components are reserved for amorphous broad peaks.",
+        type=int,
+        default=1,
+    )
     return parser.parse_args()
 
 
@@ -77,8 +96,10 @@ def process_spectrum(
     spectra_type: str,
     fit_immediately: bool,
     models_type: str,
-    models_count: int,
+    models_count: int | None,
     peak_widths: tuple[int, int],
+    extra_components: int,
+    amorph_components: int,
 ) -> None:
     """Full pipeline for a single spectrum: read -> build spec -> find peaks -> (optional) fit."""
     spectr_name = spectr_path.split("/")[-1].split(".")[0]
@@ -134,23 +155,42 @@ def process_spectrum(
     area_total = compute_total_area(df["two_theta"].values, df["intensity"].values)
     print(f"Total area (trapz): {area_total:.3f}")
 
-    # Allocate models array
-    models_arr = [{"type": models_type} for _ in range(models_count)]
+    peak_widths_arr = (peak_widths[0], peak_widths[1])
+    print(f"Peak search widths (points): {peak_widths_arr[0]}–{peak_widths_arr[1]}")
+    peaks_detected = generate_spec.detect_peaks(
+        df["two_theta"].values,
+        df["intensity"].values,
+        width_range=peak_widths_arr,
+        rel_height_min=CONFIG.rel_height_min,
+        prominence_rel=0.02,
+    )
+    print(f"Found peaks: {len(peaks_detected)}")
+
+    if models_count is not None:
+        allowed_extra = max(models_count - len(peaks_detected), 0)
+        if allowed_extra < extra_components:
+            print(f"[WARN] Extra components capped by legacy --models_count={models_count}.")
+        extra_effective = min(extra_components, allowed_extra)
+    else:
+        extra_effective = extra_components
+
+    models_arr = generate_spec.build_model_from_peaks(
+        peaks_detected,
+        model_type=models_type,
+        two_theta=df["two_theta"].values,
+        intensity=df["intensity"].values,
+        extra_components=extra_effective,
+        amorph_components=amorph_components,
+    )
+    total_components = len(models_arr)
+    amorph_used = min(amorph_components, extra_effective)
+    print(
+        f"Model components: total={total_components} "
+        f"(crystalline={len(peaks_detected)}, amorphous={amorph_used}, extra_narrow={extra_effective - amorph_used})"
+    )
 
     # Build spec dict from raw DataFrame
     spec = generate_spec.default_spec(df, models_arr)
-
-    # Update spec with peak positions
-    peak_widths_arr = (peak_widths[0], peak_widths[1])
-    print(f"Peak search widths (points): {peak_widths_arr[0]}–{peak_widths_arr[1]}")
-    spec, peaks_found = generate_spec.update_spec_from_peaks(
-        spec,
-        list(range(models_count)),
-        peak_widths=peak_widths_arr,
-        method="find_peaks",
-    )
-
-    print(f"Found peaks: {len(peaks_found)}")
 
     # Fitting block
     if fit_immediately:
@@ -171,7 +211,12 @@ def process_spectrum(
     peak_table["crystal_size_nm"] = peak_table.apply(
         lambda row: get_crystallite_size_scherrer(row["fwhm"], row["center"]), axis=1
     )
-    peak_table["is_crystalline"] = select_crystalline_peaks(peak_table)
+    if "is_amorphous" in peak_table.columns:
+        peak_table["is_crystalline"] = ~peak_table["is_amorphous"].astype(bool)
+    elif "kind" in peak_table.columns:
+        peak_table["is_crystalline"] = peak_table["kind"].astype(str) == "crystalline"
+    else:
+        peak_table["is_crystalline"] = select_crystalline_peaks(peak_table)
 
     ci_value = compute_ci(
         df["two_theta"].values,
@@ -195,8 +240,39 @@ def process_spectrum(
         print("Search–match ranking:")
         print(search_results)
 
-    # Plot result
-    plot_fit(spec["x"], spec["y"], output.best_fit)
+    fitted_peaks = fitted_peaks_from_table(peak_table)
+    assign_phases_to_peaks(
+        fitted_peaks,
+        ref_db=ref_db,
+        max_delta_two_theta=CONFIG.delta_2theta_max,
+    )
+    phase_results = aggregate_phase_results(fitted_peaks)
+    fractions = compute_area_fractions(fitted_peaks)
+
+    if fractions["area_total"] > 0:
+        print("\nPhase summary (area-based):")
+        header = f"{'Phase':15s} {'N':>3s} {'Area':>10s} {'D_avg (nm)':>12s} {'Share %':>9s} {'Cryst %':>9s}"
+        print(header)
+        print("-" * len(header))
+        for pr in sorted(phase_results, key=lambda p: p.area_total, reverse=True):
+            area_pct = 100.0 * pr.area_total / fractions["area_total"] if fractions["area_total"] else 0.0
+            cryst_pct = 0.0
+            if pr.phase_id != "amorphous" and fractions["area_cryst"] > 0:
+                cryst_pct = 100.0 * pr.area_total / fractions["area_cryst"]
+            d_avg = pr.mean_crystallite_size()
+            d_str = f"{d_avg:.2f}" if d_avg is not None else "--"
+            print(
+                f"{pr.phase_id:15s} {pr.n_peaks:3d} {pr.area_total:10.3f} {d_str:>12s} "
+                f"{area_pct:9.1f} {cryst_pct:9.1f}"
+            )
+        print("-" * len(header))
+        print(
+            f"Crystalline fraction: {fractions['x_cryst']*100:.1f} %, "
+            f"Amorphous: {fractions['x_amorph']*100:.1f} %"
+        )
+
+    # Plot result with components
+    plot_fit_with_components(spec["x"], spec["y"], output, spec=spec)
 
 
 def main() -> None:
@@ -207,7 +283,9 @@ def main() -> None:
     print(f"spectra_file_path: {args.spectra_file_path}")
     print(f"fit_immediately  : {args.fit_immediately}")
     print(f"model_type       : {args.model_type}")
-    print(f"models_count     : {args.models_count}")
+    print(f"models_count     : {args.models_count} (deprecated cap)")
+    print(f"extra_components : {args.extra_components}")
+    print(f"amorph_components: {args.amorph_components}")
 
     peak_widths = (args.peak_width_min, args.peak_width_max)
 
@@ -219,6 +297,8 @@ def main() -> None:
             models_type=args.model_type,
             models_count=args.models_count,
             peak_widths=peak_widths,
+            extra_components=args.extra_components,
+            amorph_components=args.amorph_components,
         )
 
 

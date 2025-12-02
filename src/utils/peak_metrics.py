@@ -4,8 +4,25 @@ Peak metrics: area integrals, crystallinity index, and helpers.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
+
+
+@dataclass
+class FittedPeak:
+    """
+    Fitted peak with area and phase metadata.
+    """
+
+    index: int
+    two_theta: float
+    fwhm: float
+    area: float
+    height: float
+    is_amorphous: bool = False
+    phase_id: str | None = None
 
 
 def compute_total_area(two_theta: np.ndarray, intensity: np.ndarray) -> float:
@@ -52,26 +69,31 @@ def _estimate_peak_area(row: pd.Series) -> float:
     return abs(height) * abs(fwhm)
 
 
-def compute_ci(
-    two_theta: np.ndarray,
-    intensity: np.ndarray,
-    peak_table: pd.DataFrame,
-    fwhm_threshold: float = 0.3,
-) -> float:
+def fitted_peaks_from_table(peak_table: pd.DataFrame) -> list[FittedPeak]:
     """
-    Crystallinity Index (CI) = area of crystalline peaks / total area * 100.
+    Convert lmfit peak table to structured peaks with area/kind metadata.
     """
-    area_total = compute_total_area(two_theta, intensity)
-    if area_total <= 0 or peak_table.empty:
-        return 0.0
+    peaks: list[FittedPeak] = []
+    if peak_table is None or peak_table.empty:
+        return peaks
 
-    mask = peak_table["fwhm"] <= fwhm_threshold
-    if not mask.any():
-        return 0.0
+    for idx, row in peak_table.iterrows():
+        area = row["area"] if "area" in row and pd.notna(row["area"]) else _estimate_peak_area(row)
+        kind = str(row.get("kind", "")).lower() if "kind" in row else ""
+        is_amorph = bool(kind == "amorphous" or row.get("is_amorphous", False))
 
-    area_cryst = peak_table.loc[mask].apply(_estimate_peak_area, axis=1).sum()
-    ci = (area_cryst / area_total) * 100
-    return float(ci)
+        peaks.append(
+            FittedPeak(
+                index=int(idx),
+                two_theta=float(row.get("center", np.nan)),
+                fwhm=float(row.get("fwhm", np.nan)),
+                area=float(area),
+                height=float(row.get("height", np.nan)),
+                is_amorphous=is_amorph,
+                phase_id=row.get("phase_id") if "phase_id" in row else None,
+            )
+        )
+    return peaks
 
 
 def select_crystalline_peaks(
@@ -84,18 +106,35 @@ def select_crystalline_peaks(
     Boolean mask for crystalline peaks based on FWHM/height/size sanity checks.
     """
     df = peak_table.copy()
-    max_h = df["height"].max() if "height" in df.columns else np.nan
 
+    # Start mask
     mask = pd.Series(True, index=df.index)
 
+    # Drop amorphous before computing thresholds
+    if "is_amorphous" in df.columns:
+        mask &= ~df["is_amorphous"].astype(bool)
+
+    # Apply width filter
     if "fwhm" in df.columns:
         mask &= df["fwhm"].between(fwhm_min, fwhm_max)
 
-    if "height" in df.columns and np.isfinite(max_h) and max_h > 0:
-        mask &= df["height"] >= rel_height_min * max_h
+    # Height relative to max among currently valid peaks
+    if "height" in df.columns:
+        max_h = df.loc[mask, "height"].max()
+        if np.isfinite(max_h) and max_h > 0:
+            mask &= df["height"] >= rel_height_min * max_h
 
+    # Sanity check on crystallite size if it doesn't zero everything
+    size_col = None
     if "cryst_size_nm" in df.columns:
-        mask &= df["cryst_size_nm"].between(0.5, 200.0)
+        size_col = "cryst_size_nm"
+    elif "crystal_size_nm" in df.columns:
+        size_col = "crystal_size_nm"
+
+    if size_col:
+        size_mask = df[size_col].between(0.5, 200.0)
+        if size_mask.any():
+            mask &= size_mask
 
     return mask
 
@@ -107,20 +146,30 @@ def compute_ci(
     fwhm_min: float = 0.1,
     fwhm_max: float = 2.0,
     rel_height_min: float = 0.05,
+    fwhm_threshold: float | None = None,
 ) -> float:
     """
     CI = (area of crystalline peaks / total area) * 100.
+
+    If ``fwhm_threshold`` is provided, it is treated as an upper bound on FWHM
+    (kept for backward compatibility) and overrides ``fwhm_min``/``fwhm_max``.
     """
     area_total = compute_total_area(two_theta, intensity)
     if area_total <= 0 or peak_table.empty:
         return 0.0
 
-    mask = select_crystalline_peaks(
-        peak_table,
-        fwhm_min=fwhm_min,
-        fwhm_max=fwhm_max,
-        rel_height_min=rel_height_min,
-    )
+    if fwhm_threshold is not None:
+        fwhm_min, fwhm_max = 0.0, fwhm_threshold
+
+    if "is_crystalline" in peak_table.columns:
+        mask = peak_table["is_crystalline"].astype(bool)
+    else:
+        mask = select_crystalline_peaks(
+            peak_table,
+            fwhm_min=fwhm_min,
+            fwhm_max=fwhm_max,
+            rel_height_min=rel_height_min,
+        )
 
     if not mask.any():
         return 0.0

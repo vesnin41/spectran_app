@@ -1,9 +1,12 @@
 # src/fitting/fit_model.py
 
-from lmfit import models
 import numpy as np
 import pandas as pd
 import random
+
+from lmfit import models
+
+from src.utils.peak_metrics import _estimate_peak_area
 
 
 class Model:
@@ -57,7 +60,7 @@ class Model:
         df : pandas.DataFrame
             Columns:
                 prefix, center, model, amplitude, height,
-                sigma, gamma, fwhm
+                sigma, gamma, fwhm, kind, is_amorphous, area
         """
         if self._output is None:
             raise RuntimeError("print_best_values called before fit()")
@@ -68,6 +71,7 @@ class Model:
         for i, model_dict in enumerate(self.spec["model"]):
             prefix = f"m{i}_"
             model_type = model_dict.get("type", "")
+            meta = model_dict.get("meta") or {}
 
             def _get(name):
                 par = params.get(prefix + name, None)
@@ -110,12 +114,30 @@ class Model:
                     sigma=sigma,
                     gamma=gamma,
                     fwhm=fwhm,
+                    kind=meta.get("kind"),
+                    is_amorphous=bool(meta.get("kind") == "amorphous"),
                 )
             )
 
         data = pd.DataFrame(rows)
         for col in ["center", "amplitude", "height", "sigma", "gamma", "fwhm"]:
             data[col] = data[col].round(3)
+
+        # Estimate area for each component using fitted params
+        def _area(row: pd.Series) -> float:
+            row_for_area = pd.Series(
+                {
+                    "amplitude": row.get("amplitude", np.nan),
+                    "height": row.get("height", np.nan),
+                    "sigma": row.get("sigma", np.nan),
+                    "gamma": row.get("gamma", np.nan),
+                    "fwhm": row.get("fwhm", np.nan),
+                    "model": row.get("model", ""),
+                }
+            )
+            return _estimate_peak_area(row_for_area)
+
+        data["area"] = data.apply(_area, axis=1).astype(float).round(3)
 
         return data
 
@@ -152,11 +174,17 @@ class Model:
             except AttributeError:
                 raise NotImplementedError(f"lmfit does not support model: {model_type}")
 
-            # Parameter bounds
-            model.set_param_hint("sigma", min=1e-6, max=x_range)
-            model.set_param_hint("center", min=x_min, max=x_max)
-            model.set_param_hint("height", min=1e-6, max=1.1 * y_max)
-            model.set_param_hint("amplitude", min=1e-6)
+            # Parameter bounds (can be overridden via model_def["param_hints"])
+            base_hints = {
+                "sigma": {"min": 1e-6, "max": x_range},
+                "center": {"min": x_min, "max": x_max},
+                "height": {"min": 1e-6, "max": 1.1 * y_max},
+                "amplitude": {"min": 1e-6},
+            }
+            extra_hints = model_def.get("param_hints", {})
+            for par_name, hint_kwargs in base_hints.items():
+                merged = {**hint_kwargs, **extra_hints.get(par_name, {})}
+                model.set_param_hint(par_name, **merged)
 
             # Default random starting values
             default_params = {
