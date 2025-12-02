@@ -49,9 +49,15 @@ def _greedy_match_peaks(
     """
     Greedy one-to-one matching of experimental and reference peaks within tolerance.
     """
+    if exp_peaks is None or exp_peaks.empty:
+        return pd.DataFrame()
+
     exp = exp_peaks[["center", "height"]].dropna().copy()
     exp["exp_index"] = exp.index
     ref = ref_peaks[["two_theta", "intensity"]].dropna().copy()
+
+    if exp.empty or ref.empty:
+        return pd.DataFrame()
 
     exp["intensity_norm"] = normalize_data(exp["height"].values)
     ref["intensity_norm"] = normalize_data(ref["intensity"].values)
