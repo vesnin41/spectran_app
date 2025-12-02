@@ -8,7 +8,7 @@ from src.analysis.phase_assign import assign_phases_to_peaks
 from src.analysis.phase_summary import aggregate_phase_results, compute_area_fractions
 from src.config import CONFIG
 from src.fitting import fit_model, generate_spec
-from src.plotting.plots import plot_fit, plot_fit_with_components
+from src.plotting.plots import plot_fit, plot_fit_with_components, plot_residuals
 from src.reading.data_from import spectrum_from_csv
 from src.utils.peak_metrics import (
     compute_ci,
@@ -207,6 +207,8 @@ def process_spectrum(
     print("Start fitting...")
     model = fit_model.Model(spec)
     output = model.fit()
+    residual_var = float(np.var(output.residual))
+    print(f"Residual variance: {residual_var:.4f}")
     peak_table = model.print_best_values()
     peak_table["d_hkl"] = peak_table["center"].apply(get_d_hkl)
     peak_table["crystal_size_nm"] = peak_table.apply(
@@ -271,6 +273,11 @@ def process_spectrum(
 
     # Plot result with components
     plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table)
+    plot_residuals(
+        spec["x"],
+        output.residual,
+        title=f"Остатки (var={residual_var:.4f})",
+    )
 
 
 def main() -> None:

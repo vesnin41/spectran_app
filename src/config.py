@@ -19,6 +19,7 @@ class XRDConfig:
     amorph_width_factor: float = 3.0  # how many times wider than median crystalline FWHM counts as amorphous
     amorph_fwhm_min: float = 1.5  # absolute FWHM threshold (deg 2θ) to treat as amorphous
     min_crystal_size_nm: float = 2.0  # below this size treat as non-crystalline
+    amorph_components_default: int = 1  # default amorphous components for interactive mode
 
 
 CONFIG = XRDConfig()

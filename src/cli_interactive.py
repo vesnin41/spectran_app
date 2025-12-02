@@ -34,6 +34,7 @@ from src.plotting.plots import (
     plot_fit,
     plot_fit_with_phase_markers,
     plot_fit_with_components,
+    plot_residuals,
     plot_ref_preview,
 )
 from src.utils.peak_metrics import select_crystalline_peaks
@@ -119,6 +120,17 @@ def save_results(
     fig_comp, _ = plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table, show=False)
     fig_comp.savefig(result_dir / "fit_components.png", dpi=300)
     plt.close(fig_comp)
+
+    # Residuals plot
+    residual_var = float(np.var(output.residual))
+    fig_res, _ = plot_residuals(
+        spec["x"],
+        output.residual,
+        title=f"Остатки (var={residual_var:.4f})",
+        show=False,
+    )
+    fig_res.savefig(result_dir / "fit_residuals.png", dpi=300)
+    plt.close(fig_res)
 
     # Phase markers plot (if phase_id present)
     if "phase_id" in peak_table.columns:
@@ -341,7 +353,7 @@ def interactive_session() -> None:
             )
 
             extra_components = ask_int("Дополнительные компоненты сверх найденных пиков (по умолчанию 4): ", default=4)
-            amorph_components = ask_int("Сколько из них оставить под аморфный горб (по умолчанию 1): ", default=1)
+            amorph_components = CONFIG.amorph_components_default
 
             wmin = ask_int("Минимальная ширина пиков в точках (по умолчанию 3): ", default=3)
             wmax = ask_int("Максимальная ширина пиков в точках (по умолчанию 40): ", default=40)
@@ -402,6 +414,8 @@ def interactive_session() -> None:
         model = fit_model.Model(spec)
         output = model.fit()
         peak_table = model.print_best_values()
+        residual_var = float(np.var(output.residual))
+        print(f"Дисперсия остатков: {residual_var:.4f}")
         peak_table["d_hkl"] = peak_table["center"].apply(get_d_hkl)
         peak_table["crystal_size_nm"] = peak_table.apply(
             lambda row: get_crystallite_size_scherrer(row["fwhm"], row["center"]),
@@ -475,6 +489,11 @@ def interactive_session() -> None:
 
         plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table)
         plot_fit_with_phase_markers(spec["x"], spec["y"], output.best_fit, peak_table)
+        plot_residuals(
+            spec["x"],
+            output.residual,
+            title=f"Остатки (var={residual_var:.4f})",
+        )
 
         save_choice = input("Сохранить результаты в файлы? [Y/n]: ").strip().lower()
         if save_choice in ("", "y", "yes"):

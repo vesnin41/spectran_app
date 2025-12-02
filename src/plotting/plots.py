@@ -144,6 +144,30 @@ def plot_fit_with_components(
     return fig, ax
 
 
+def plot_residuals(
+    two_theta: np.ndarray,
+    residuals: np.ndarray,
+    title: str | None = None,
+    show: bool = True,
+):
+    """
+    Plot residuals with variance annotation.
+    """
+    fig, ax = plt.subplots(figsize=(8, 3))
+    ax.plot(two_theta, residuals, linewidth=0.8, color="C3")
+    ax.axhline(0.0, color="black", linestyle="--", linewidth=0.8, alpha=0.6)
+    if title:
+        ax.set_title(title, fontsize=12)
+    ax.set_xlabel("2θ, град", fontsize=12)
+    ax.set_ylabel("Остаток", fontsize=12)
+    ax.tick_params(axis="both", which="major", labelsize=10)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    if show:
+        plt.show()
+    return fig, ax
+
+
 def plot_fit_with_phase_markers(
     two_theta: np.ndarray,
     intensity: np.ndarray,
