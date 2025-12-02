@@ -1,0 +1,140 @@
+#------------------------------------------------------------------------------
+#$Date: 2016-02-13 14:50:18 +0200 (Sat, 13 Feb 2016) $
+#$Revision: 176428 $
+#$URL: file:///home/coder/svn-repositories/cod/cif/2/10/61/2106194.cif $
+#------------------------------------------------------------------------------
+#
+# This file is available in the Crystallography Open Database (COD),
+# http://www.crystallography.net/. The original data for this entry
+# were provided by IUCr Journals, http://journals.iucr.org/.
+#
+# The file may be used within the scientific community so long as
+# proper attribution is given to the journal article from which the
+# data were obtained.
+#
+data_2106194
+loop_
+_publ_author_name
+'Mathew, M.'
+'Brown, W.E.'
+'Schroeder, L.W.'
+'Dickens, B.'
+_publ_section_title
+;
+ The crystal structure of alpha-Ca3 (P O4)2
+;
+_journal_name_full               'Acta Crystallographica B (24,1968-38,1982)'
+_journal_page_first              1325
+_journal_page_last               1333
+_journal_volume                  33
+_journal_year                    1977
+_chemical_formula_sum            'Ca3 O8 P2'
+_chemical_name_systematic        'Ca3 (P O4)2'
+_space_group_IT_number           14
+_symmetry_space_group_name_Hall  '-P 2yab'
+_symmetry_space_group_name_H-M   'P 1 21/a 1'
+_cell_angle_alpha                90
+_cell_angle_beta                 126.2
+_cell_angle_gamma                90
+_cell_formula_units_Z            24
+_cell_length_a                   12.887
+_cell_length_b                   27.28
+_cell_length_c                   15.219
+_cell_volume                     4317.521
+_citation_journal_id_ASTM        ACBCAR
+_cod_data_source_file            Mathew_ACBCAR_1977_626.cif
+_cod_data_source_block           Ca3O8P2
+_cod_original_sg_symbol_Hall     '-P 2ybc (z,y,-x)'
+_cod_database_code               2106194
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+-x+1/2,y+1/2,-z
+-x,-y,-z
+x-1/2,-y-1/2,z
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_U_iso_or_equiv
+O28 O-2 0.4199 0.3301 0.2315 1 0.0
+Ca6 Ca+2 0.36805 0.13863 0.33207 1 0.0
+Ca18 Ca+2 0.35132 0.47366 0.30781 1 0.0
+O34 O-2 0.4076 0.5066 0.033 1 0.0
+P1 P+5 0.388 0.13702 0.11108 1 0.0
+O38 O-2 0.2842 0.4424 0.4084 1 0.0
+O45 O-2 0.0045 0.5568 0.1439 1 0.0
+P3 P+5 0.10908 0.1922 0.70029 1 0.0
+O1 O-2 0.2761 0.1011 0.0641 1 0.0
+O9 O-2 0.0035 0.232 0.6347 1 0.0
+O12 O-2 0.1104 0.1741 0.7957 1 0.0
+O20 O-2 0.0852 0.3257 0.7864 1 0.0
+P12 P+5 0.12623 0.53965 0.15574 1 0.0
+Ca12 Ca+2 0.14746 0.30227 0.67533 1 0.0
+O27 O-2 0.272 0.3944 0.2247 1 0.0
+Ca2 Ca+2 0.14742 0.04937 0.32729 1 0.0
+P8 P+5 0.3734 0.36794 0.84241 1 0.0
+P11 P+5 0.13742 0.52919 0.69994 1 0.0
+O17 O-2 0.2461 0.2766 0.9563 1 0.0
+O36 O-2 0.4314 0.5011 0.2099 1 0.0
+Ca14 Ca+2 0.17089 0.37277 0.32417 1 0.0
+O37 O-2 0.34 0.4363 0.599 1 0.0
+O7 O-2 0.4194 0.1833 0.5351 1 0.0
+O3 O-2 0.5086 0.1095 0.1384 1 0.0
+O25 O-2 0.5038 0.4012 0.3672 1 0.0
+O15 O-2 0.1856 0.2361 0.1007 1 0.0
+O8 O-2 0.5032 0.1002 0.614 1 0.0
+P7 P+5 0.3949 0.36306 0.29933 1 0.0
+O18 O-2 0.1543 0.353 0.9698 1 0.0
+O21 O-2 0.2139 0.2728 0.5702 1 0.0
+Ca7 Ca+2 0.12125 0.19139 0.94434 1 0.0
+O11 O-2 0.2388 0.2181 0.7446 1 0.0
+O24 O-2 -0.0051 0.2706 0.3896 1 0.0
+O22 O-2 0.1847 0.2938 0.3931 1 0.0
+O41 O-2 0.0163 0.5607 0.6247 1 0.0
+Ca3 Ca+2 0.08768 0.07286 0.04976 1 0.0
+O26 O-2 0.3707 0.3332 0.3704 1 0.0
+O43 O-2 0.2515 0.5665 0.7643 1 0.0
+O46 O-2 0.1229 0.4831 0.154 1 0.0
+O16 O-2 0.2366 0.2081 0.2791 1 0.0
+O35 O-2 0.4774 0.4299 0.1399 1 0.0
+O42 O-2 0.1716 0.4979 0.6369 1 0.0
+O31 O-2 0.3476 0.3919 0.9191 1 0.0
+O48 O-2 0.2542 0.5551 0.262 1 0.0
+O47 O-2 0.1189 0.5592 0.0578 1 0.0
+O10 O-2 0.0845 0.1475 0.6307 1 0.0
+Ca13 Ca+2 0.39021 0.35179 0.07293 1 0.0
+O23 O-2 0.1033 0.3501 0.4688 1 0.0
+O33 O-2 0.2479 0.4592 0.0362 1 0.0
+Ca8 Ca+2 0.37108 0.21591 0.67698 1 0.0
+O19 O-2 0.0116 0.2771 0.8759 1 0.0
+O13 O-2 0.007 0.2316 0.1227 1 0.0
+Ca11 Ca+2 0.41359 0.24537 0.20819 1 0.0
+O2 O-2 0.3488 0.1793 0.0326 1 0.0
+O6 O-2 0.2897 0.1103 0.4287 1 0.0
+Ca9 Ca+2 0.38603 0.23433 0.93751 1 0.0
+Ca5 Ca+2 0.05783 0.08708 0.74743 1 0.0
+Ca15 Ca+2 0.10282 0.41293 0.04926 1 0.0
+O4 O-2 0.429 0.1592 0.2211 1 0.0
+Ca1 Ca+2 0.39138 0.026 0.08612 1 0.0
+O5 O-2 0.3132 0.1366 0.6013 1 0.0
+O30 O-2 0.3861 0.3117 0.8594 1 0.0
+O32 O-2 0.2571 0.3781 0.7261 1 0.0
+P5 P+5 0.12481 0.30784 0.89906 1 0.0
+Ca10 Ca+2 0.36956 0.25894 0.43849 1 0.0
+O44 O-2 0.1269 0.4986 0.7785 1 0.0
+O29 O-2 0.5017 0.3874 0.8709 1 0.0
+P2 P+5 0.37924 0.13123 0.54396 1 0.0
+Ca4 Ca+2 0.14267 0.08946 0.55957 1 0.0
+P9 P+5 0.38889 0.47498 0.10213 1 0.0
+P4 P+5 0.13563 0.20844 0.15665 1 0.0
+Ca17 Ca+2 0.11815 0.41466 0.80001 1 0.0
+O39 O-2 0.3292 0.5193 0.5186 1 0.0
+O14 O-2 0.1014 0.1557 0.1099 1 0.0
+Ca16 Ca+2 0.13909 0.42447 0.56149 1 0.0
+P10 P+5 0.36219 0.46463 0.52427 1 0.0
+O40 O-2 0.5078 0.4605 0.5782 1 0.0
+P6 P+5 0.12715 0.29631 0.45789 1 0.0
