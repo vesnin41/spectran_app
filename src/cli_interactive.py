@@ -37,6 +37,7 @@ from src.plotting.plots import (
     plot_residuals,
     plot_ref_preview,
 )
+from src.outputting.report import save_fit_outputs
 from src.utils.peak_metrics import select_crystalline_peaks
 from src.utils.search_match import (
     annotate_peaks_with_phases,
@@ -104,70 +105,16 @@ def save_results(
     sample_name = Path(spectr_path).stem
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     result_dir = Path("results") / f"{sample_name}_{timestamp}"
-    result_dir.mkdir(parents=True, exist_ok=True)
 
-    peak_table.to_csv(result_dir / "peak_table.csv", index=False)
-    # Save experimental and fitted curve
-    fit_df = pd.DataFrame({"two_theta": spec["x"], "intensity": spec["y"], "best_fit": output.best_fit})
-    fit_df.to_csv(result_dir / "fit_curve.csv", index=False)
-
-    # Fit plot
-    fig, _ = plot_fit(spec["x"], spec["y"], output.best_fit, show=False)
-    fig.savefig(result_dir / "fit.png", dpi=300)
-    plt.close(fig)
-
-    # Components plot
-    fig_comp, _ = plot_fit_with_components(spec["x"], spec["y"], output, spec=spec, peak_table=peak_table, show=False)
-    fig_comp.savefig(result_dir / "fit_components.png", dpi=300)
-    plt.close(fig_comp)
-
-    # Residuals plot
-    residual_var = float(np.var(output.residual))
-    fig_res, _ = plot_residuals(
-        spec["x"],
-        output.residual,
-        title=f"Остатки (var={residual_var:.4f})",
-        show=False,
+    save_fit_outputs(
+        result_dir=result_dir,
+        spec=spec,
+        output=output,
+        peak_table=peak_table,
+        preprocessing_cfg=preprocessing_cfg,
+        ci=ci,
+        fit_cfg=fit_cfg,
     )
-    fig_res.savefig(result_dir / "fit_residuals.png", dpi=300)
-    plt.close(fig_res)
-
-    # Phase markers plot (if phase_id present)
-    if "phase_id" in peak_table.columns:
-        fig_phase, _ = plot_fit_with_phase_markers(spec["x"], spec["y"], output.best_fit, peak_table, show=False)
-        fig_phase.savefig(result_dir / "fit_phases.png", dpi=300)
-        plt.close(fig_phase)
-
-    # Raw vs processed if available in cfg
-    if preprocessing_cfg.get("raw_two_theta") is not None:
-        fig_raw, _ = plot_spectrum(
-            spec["x"],
-            spec["y"],
-            overlay=[
-                (preprocessing_cfg["raw_two_theta"], preprocessing_cfg["raw_intensity"], "Сырой"),
-            ],
-            label="Обработанный",
-            title="Сырой vs обработанный",
-            show=False,
-        )
-        fig_raw.savefig(result_dir / "raw_vs_processed.png", dpi=300)
-        plt.close(fig_raw)
-
-    # Save meta
-    meta_path = result_dir / "summary.txt"
-    with meta_path.open("w", encoding="utf-8") as fh:
-        fh.write(f"Sample: {sample_name}\n")
-        fh.write(f"File: {spectr_path}\n")
-        fh.write(f"CI (%): {ci:.2f}\n")
-        fh.write("Preprocessing:\n")
-        for k, v in preprocessing_cfg.items():
-            if k.startswith("raw_"):
-                continue
-            fh.write(f"  {k}: {v}\n")
-        if fit_cfg:
-            fh.write("Fitting:\n")
-            for k, v in fit_cfg.items():
-                fh.write(f"  {k}: {v}\n")
 
     print(f"Результаты сохранены в: {result_dir}")
 
@@ -366,7 +313,7 @@ def interactive_session() -> None:
                 df_proc["intensity"].values,
                 width_range=peak_widths_arr,
                 rel_height_min=CONFIG.rel_height_min,
-                prominence_rel=0.02,
+                prominence_rel=CONFIG.prominence_rel,
             )
             peak_indices = np.array([p.index for p in peaks_detected], dtype=int) if peaks_detected else np.array([], dtype=int)
             print(f"Найдено пиков: {len(peaks_detected)}")
@@ -504,7 +451,7 @@ def interactive_session() -> None:
                 "peak_widths": (wmin, wmax),
                 "peak_method": "find_peaks",
                 "rel_height_min": 0.05,
-                "prominence_rel": 0.02,
+                "prominence_rel": CONFIG.prominence_rel,
             }
             save_results(
                 spectr_path=spectr_path,
